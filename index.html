@@ -108,7 +108,7 @@
   </div>
 
   <div style="text-align:center;">
-    <span id="cloudStatus" style="font-size:12px; font-weight:bold; color:#00e676;">(CLOUD LINK: SYNCING... | BAT: --V | UPTIME: --)</span>
+    <span id="cloudStatus" style="font-size:12px; font-weight:bold; color:#00e676;">(LINK: SYNCING... | BAT: --V | UPTIME: --)</span>
   </div>
 
   <!-- Login Button Container -->
@@ -200,7 +200,6 @@
     <span style="font-size:11px; color:var(--text-muted);">🆔 ESP32 Board MAC ID (License):</span>
     <div class="form-row"><input type="text" id="cfg_mac_id" readonly placeholder="Fetching MAC..."><button class="btn-save" style="background:#f57c00;" onclick="copyMacId()">COPY ID</button></div>
 
-    <!-- OWNER DIRECT PIN FIELD (DYNAMICALLY FETCHED) -->
     <span style="font-size:11px; color:var(--text-muted);">🔑 Owner Direct PIN (User):</span>
     <div class="form-row">
       <div class="pw-container">
@@ -304,7 +303,7 @@
     </div>
   </div>
 
-  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v27.3 (Smart Sync & Dynamic PIN)</p>
+  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v27.4 (Smart Sync, Dynamic PIN & Dual-Link Status)</p>
 
   <script>
     const FIREBASE_HOST = "keylesstrackerrenz-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -702,9 +701,10 @@
             }
           }
 
-          document.getElementById('cloudStatus').innerText = `(BAT: ${data.battery || '--'} | UPTIME: ${data.uptime || '--'})`;
+          // DYNAMIC CONNECTION STATUS DISPLAY
+          let connType = data.conn_type || 'UNKNOWN';
+          document.getElementById('cloudStatus').innerText = `(LINK: ${connType} | BAT: ${data.battery || '--'} | UPTIME: ${data.uptime || '--'})`;
 
-          // GUMAGAMIT NA NG safeUpdate() PARA HINDI MABURA HABANG NAGTA-TYPE
           if (data.direct_pin !== undefined) safeUpdate('cfg_owner_pin', data.direct_pin);
           
           if (data.alarm !== undefined) document.getElementById('tog_alarm').checked = data.alarm;
