@@ -304,7 +304,7 @@
     </div>
   </div>
 
-  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v27.2 (Smart Sync & Dynamic PIN)</p>
+  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v27.3 (Smart Sync & Dynamic PIN)</p>
 
   <script>
     const FIREBASE_HOST = "keylesstrackerrenz-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -337,6 +337,16 @@
         className: '',
         iconSize: [32, 32]
     });
+
+    // ==========================================
+    // HELPER FUNCTION: PREVENT TEXTBOX OVERWRITE
+    // ==========================================
+    function safeUpdate(elementId, newValue) {
+      let el = document.getElementById(elementId);
+      if (el && el.value !== String(newValue) && document.activeElement !== el) {
+        el.value = newValue;
+      }
+    }
 
     // ==========================================
     // STRICT GEOFENCE LOGIC (LOCATION REQUEST)
@@ -516,8 +526,8 @@
     function updateWifiInputs(slotNum) {
       let idx = parseInt(slotNum) - 1;
       if (savedWifiData[idx]) {
-        document.getElementById('wifiSsidInput').value = savedWifiData[idx].ssid || "";
-        document.getElementById('wifiPassInput').value = savedWifiData[idx].pass || "";
+        safeUpdate('wifiSsidInput', savedWifiData[idx].ssid || "");
+        safeUpdate('wifiPassInput', savedWifiData[idx].pass || "");
       }
     }
 
@@ -694,11 +704,9 @@
 
           document.getElementById('cloudStatus').innerText = `(BAT: ${data.battery || '--'} | UPTIME: ${data.uptime || '--'})`;
 
-          // DITO BINABASA ANG DIRECT PIN MULA SA CLOUD
-          if (data.direct_pin !== undefined) {
-            document.getElementById('cfg_owner_pin').value = data.direct_pin;
-          }
-
+          // GUMAGAMIT NA NG safeUpdate() PARA HINDI MABURA HABANG NAGTA-TYPE
+          if (data.direct_pin !== undefined) safeUpdate('cfg_owner_pin', data.direct_pin);
+          
           if (data.alarm !== undefined) document.getElementById('tog_alarm').checked = data.alarm;
           if (data.intro !== undefined) document.getElementById('tog_intro').checked = data.intro;
           if (data.remote_1 !== undefined) document.getElementById('tog_rem1').checked = data.remote_1;
@@ -714,22 +722,22 @@
           if (data.isc !== undefined) document.getElementById('tog_isc').checked = data.isc;
           if (data.hw_button !== undefined) document.getElementById('tog_hwbtn').checked = data.hw_button;
 
-          if (data.mac_id !== undefined) document.getElementById('cfg_mac_id').value = data.mac_id;
-          if (data.alarm_dur !== undefined) document.getElementById('cfg_alarm_dur').value = data.alarm_dur;
-          if (data.license_url !== undefined) document.getElementById('cfg_license_url').value = data.license_url;
+          if (data.mac_id !== undefined) safeUpdate('cfg_mac_id', data.mac_id);
+          if (data.alarm_dur !== undefined) safeUpdate('cfg_alarm_dur', data.alarm_dur);
+          if (data.license_url !== undefined) safeUpdate('cfg_license_url', data.license_url);
 
-          if (data.cc1101_freq !== undefined) document.getElementById('cfg_freq').value = data.cc1101_freq;
-          if (data.rssi_thresh !== undefined) document.getElementById('cfg_rssi').value = data.rssi_thresh;
-          if (data.trusted_num !== undefined) document.getElementById('cfg_trusted').value = data.trusted_num;
-          if (data.admin_num !== undefined) document.getElementById('cfg_admin').value = data.admin_num;
-          if (data.emergency_pin !== undefined) document.getElementById('cfg_emg_pin').value = data.emergency_pin;
-          if (data.tracker_url !== undefined) document.getElementById('cfg_tracker').value = data.tracker_url;
-          if (data.ap_ssid !== undefined) document.getElementById('cfg_ap_ssid').value = data.ap_ssid;
-          if (data.firebase_host !== undefined) document.getElementById('cfg_fb').value = data.firebase_host;
-          if (data.github_repo !== undefined) document.getElementById('cfg_gh').value = data.github_repo;
-          if (data.web_header !== undefined) document.getElementById('cfg_hdr').value = data.web_header;
-          if (data.mdns_name !== undefined) document.getElementById('cfg_mdns').value = data.mdns_name;
-          if (data.ap_pass !== undefined) document.getElementById('cfg_ap_pass').value = data.ap_pass;
+          if (data.cc1101_freq !== undefined) safeUpdate('cfg_freq', data.cc1101_freq);
+          if (data.rssi_thresh !== undefined) safeUpdate('cfg_rssi', data.rssi_thresh);
+          if (data.trusted_num !== undefined) safeUpdate('cfg_trusted', data.trusted_num);
+          if (data.admin_num !== undefined) safeUpdate('cfg_admin', data.admin_num);
+          if (data.emergency_pin !== undefined) safeUpdate('cfg_emg_pin', data.emergency_pin);
+          if (data.tracker_url !== undefined) safeUpdate('cfg_tracker', data.tracker_url);
+          if (data.ap_ssid !== undefined) safeUpdate('cfg_ap_ssid', data.ap_ssid);
+          if (data.firebase_host !== undefined) safeUpdate('cfg_fb', data.firebase_host);
+          if (data.github_repo !== undefined) safeUpdate('cfg_gh', data.github_repo);
+          if (data.web_header !== undefined) safeUpdate('cfg_hdr', data.web_header);
+          if (data.mdns_name !== undefined) safeUpdate('cfg_mdns', data.mdns_name);
+          if (data.ap_pass !== undefined) safeUpdate('cfg_ap_pass', data.ap_pass);
 
           if (data.wf_s1 !== undefined) savedWifiData[0].ssid = data.wf_s1;
           if (data.wf_p1 !== undefined) savedWifiData[0].pass = data.wf_p1;
