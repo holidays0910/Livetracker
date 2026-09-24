@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Keyless Entry System - Cloud Live Tracker v27.7</title>
+  <title>Keyless Entry System - Cloud Live Tracker v28.1</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -126,6 +126,11 @@
       display: block; 
       position: relative; 
       z-index: 10; 
+    }
+
+    .btn:disabled {
+      background: #555 !important;
+      cursor: not-allowed;
     }
 
     .btn-unlock { background: #00e676; color: #000; }
@@ -344,6 +349,26 @@
       text-align: center;
       display: none;
     }
+
+    .stolen-banner {
+      background: #d32f2f;
+      color: #fff;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px auto;
+      max-width: 500px;
+      font-size: 15px;
+      font-weight: bold;
+      text-align: center;
+      display: none;
+      animation: blink 1.5s infinite;
+    }
+
+    @keyframes blink {
+      0% { opacity: 1; }
+      50% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
   </style>
 </head>
 <body>
@@ -359,6 +384,11 @@
   <div class="header-bar">
     <div class="header-title" id="headerTitleText">B - CONNECT</div>
     <div id="profileBadge" class="profile-badge" style="color:#ff5252; border-color:#ff5252;">🔒 LOCKED</div>
+  </div>
+
+  <!-- STOLEN MODE Banner -->
+  <div id="stolenWarningBanner" class="stolen-banner">
+    🚨 STOLEN MODE ACTIVE: Engine Locked & Tracking Prioritized! 🚨
   </div>
 
   <!-- PMS Warning Banner -->
@@ -677,12 +707,11 @@
     </div>
   </div>
 
-  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v27.7 (Odo Engine, Stealth & Lag-Free Fixes)</p>
+  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v28.1 (Stolen Mode & Strict Server Auth)</p>
 
   <script>
     const FIREBASE_HOST = "keylesstrackerrenz-default-rtdb.asia-southeast1.firebasedatabase.app";
-    let adminPassword = "79910101"; 
-
+    
     // Generate Unique Viewer ID & Role System
     const myViewerId = "v_" + Math.random().toString(36).substr(2, 9);
     let myViewerRole = "GUEST"; 
@@ -793,40 +822,87 @@
     function submitModalLogin() {
       let pin = document.getElementById('modalPinInput').value;
       if (pin) {
-        activePin = pin;
-        isAdmin = (pin === adminPassword);
-        
-        document.getElementById('loginLogoutBtn').className = "btn btn-lock";
-        document.getElementById('loginLogoutBtn').innerText = "🚪 LOGOUT SESSION";
-        document.getElementById('loginLogoutBtn').onclick = logoutSession;
+        document.getElementById('loginLogoutBtn').innerText = "⏳ VERIFYING...";
+        document.getElementById('loginLogoutBtn').disabled = true;
 
-        let badge = document.getElementById('profileBadge');
-        if (isAdmin) {
-          myViewerRole = "ADMIN"; 
-          badge.className = "profile-badge badge-admin"; 
-          badge.innerText = "👨‍💻 ADMIN PROFILE";
-          document.getElementById('adminSlidersDiv').style.display = "block";
-          document.getElementById('adminConfigCardDiv').style.display = "block";
-          document.getElementById('viewerCountDiv').style.display = "block";
-          fetchViewers();
-        } else {
-          myViewerRole = "OWNER"; 
-          badge.className = "profile-badge badge-user"; 
-          badge.innerText = "👤 OWNER PROFILE";
-          document.getElementById('adminSlidersDiv').style.display = "none";
-          document.getElementById('adminConfigCardDiv').style.display = "none";
-          document.getElementById('viewerCountDiv').style.display = "none";
-        }
-
-        pingPresence();
-        document.getElementById('hiddenAuthSection').style.display = "block";
-        document.getElementById('loginBtnContainer').style.display = "block"; 
-        closeLoginModal();
-        sendCloudCmd("login_check");
-        
-        let today = new Date().toISOString().split('T')[0];
-        document.getElementById('historyDateInput').value = today;
+        let payload = { cmd: "login_check", pin: pin, ts: Math.floor(Date.now() / 1000) };
+        fetch(`https://${FIREBASE_HOST}/cloud_cmd.json`, { 
+          method: 'PUT', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify(payload) 
+        }).then(() => {
+          checkLoginResponse(pin);
+        }).catch(err => {
+          console.error("Cloud Error:", err);
+          resetLoginBtn();
+        });
       }
+    }
+
+    function checkLoginResponse(pin) {
+      let attempts = 0;
+      let pollInterval = setInterval(() => {
+          fetch(`https://${FIREBASE_HOST}/login_response.json?t=` + Date.now())
+          .then(r => r.json())
+          .then(data => {
+              if (data && data.pin === pin) {
+                  clearInterval(pollInterval);
+                  if (data.status === "GRANTED") {
+                      activePin = pin;
+                      isAdmin = (data.role === "ADMIN");
+                      finalizeLogin(pin, isAdmin);
+                      fetch(`https://${FIREBASE_HOST}/login_response.json`, { method: 'DELETE' });
+                  } else {
+                      alert("Access Denied: Invalid PIN.");
+                      resetLoginBtn();
+                  }
+              }
+          });
+          attempts++;
+          if (attempts > 15) { 
+              clearInterval(pollInterval);
+              alert("Timeout: ESP32 device is offline or not responding to authentication.");
+              resetLoginBtn();
+          }
+      }, 1000);
+    }
+
+    function finalizeLogin(pin, isAdminUser) {
+      document.getElementById('loginLogoutBtn').disabled = false;
+      document.getElementById('loginLogoutBtn').className = "btn btn-lock";
+      document.getElementById('loginLogoutBtn').innerText = "🚪 LOGOUT SESSION";
+      document.getElementById('loginLogoutBtn').onclick = logoutSession;
+
+      let badge = document.getElementById('profileBadge');
+      if (isAdminUser) {
+        myViewerRole = "ADMIN"; 
+        badge.className = "profile-badge badge-admin"; 
+        badge.innerText = "👨‍💻 ADMIN PROFILE";
+        document.getElementById('adminSlidersDiv').style.display = "block";
+        document.getElementById('adminConfigCardDiv').style.display = "block";
+        document.getElementById('viewerCountDiv').style.display = "block";
+        fetchViewers();
+      } else {
+        myViewerRole = "OWNER"; 
+        badge.className = "profile-badge badge-user"; 
+        badge.innerText = "👤 OWNER PROFILE";
+        document.getElementById('adminSlidersDiv').style.display = "none";
+        document.getElementById('adminConfigCardDiv').style.display = "none";
+        document.getElementById('viewerCountDiv').style.display = "none";
+      }
+
+      pingPresence();
+      document.getElementById('hiddenAuthSection').style.display = "block";
+      document.getElementById('loginBtnContainer').style.display = "block"; 
+      closeLoginModal();
+      
+      let today = new Date().toISOString().split('T')[0];
+      document.getElementById('historyDateInput').value = today;
+    }
+
+    function resetLoginBtn() {
+      document.getElementById('loginLogoutBtn').disabled = false;
+      document.getElementById('loginLogoutBtn').innerText = "🔑 LOGIN SYSTEM";
     }
 
     function logoutSession() {
@@ -838,8 +914,8 @@
       document.getElementById('profileBadge').className = "profile-badge";
       document.getElementById('profileBadge').innerText = "🔒 LOCKED";
       
+      resetLoginBtn();
       document.getElementById('loginLogoutBtn').className = "btn btn-unlock";
-      document.getElementById('loginLogoutBtn').innerText = "🔑 LOGIN SYSTEM";
       document.getElementById('loginLogoutBtn').onclick = openLoginModal;
       
       document.getElementById('hiddenAuthSection').style.display = "none";
@@ -1076,7 +1152,14 @@
             let odoDisplay = (data.odo !== undefined) ? parseFloat(data.odo).toFixed(1) + 'km' : '--km';
             document.getElementById('cloudStatus').innerText = `(LINK: ${connType} | BAT: ${data.battery || '--'} | ODO: ${odoDisplay} | UPTIME: ${data.uptime || '--'})`;
 
-            // Handle PMS Banner Visiblity
+            // Handle STOLEN Banner Visibility
+            if (data.status === "STOLEN") {
+               document.getElementById('stolenWarningBanner').style.display = 'block';
+            } else {
+               document.getElementById('stolenWarningBanner').style.display = 'none';
+            }
+
+            // Handle PMS Banner Visibility
             if (data.pms_alert === true || data.pms_alert === "true") {
                document.getElementById('pmsWarningBanner').style.display = 'block';
             } else {
