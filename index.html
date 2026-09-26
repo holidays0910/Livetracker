@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Keyless Entry System - Cloud Live Tracker v28.1</title>
+  <title>Keyless Entry System - Cloud Live Tracker v28.2</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -126,11 +126,14 @@
       display: block; 
       position: relative; 
       z-index: 10; 
+      transition: opacity 0.3s, background 0.3s;
     }
 
     .btn:disabled {
-      background: #555 !important;
+      background: #444444 !important;
+      color: #888888 !important;
       cursor: not-allowed;
+      opacity: 0.6;
     }
 
     .btn-unlock { background: #00e676; color: #000; }
@@ -174,7 +177,7 @@
       border: 1px solid var(--border-color); 
       position: relative; 
       z-index: 1; 
-    }
+    } 
     
     .vehicle-marker { 
       font-size: 32px; 
@@ -364,6 +367,20 @@
       animation: blink 1.5s infinite;
     }
 
+    /* SMART CELLULAR WARNING BANNER */
+    .data-warning-banner {
+      background: #e65100;
+      color: #ffffff;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px auto;
+      max-width: 500px;
+      font-size: 13px;
+      font-weight: bold;
+      text-align: center;
+      display: none;
+    }
+
     @keyframes blink {
       0% { opacity: 1; }
       50% { opacity: 0.7; }
@@ -394,6 +411,12 @@
   <!-- PMS Warning Banner -->
   <div id="pmsWarningBanner" class="alert-banner">
     ⚠️ MAINTENANCE DUE! Please check your motorcycle, then update PMS target.
+  </div>
+
+  <!-- CELLULAR / DATA MODE Warning Banner -->
+  <div id="dataWarningBanner" class="data-warning-banner">
+    ⚠️ MOTORCYCLE IS ON CELLULAR DATA (SIM800L) ⚠️<br>
+    <span style="font-size:11px; font-weight:normal;">Live Cloud Controls are auto-disabled to prevent lag and command queuing. Text SMS (e.g. <b>LOCK &lt;PIN&gt;</b>) to control directly.</span>
   </div>
 
   <!-- Login Button Container (Visible before login) -->
@@ -427,10 +450,10 @@
 
     <!-- Main System Control Buttons -->
     <div id="mainControlsDiv">
-      <button class="btn btn-unlock" onclick="sendCloudCmd('unlock')">UNLOCK</button>
-      <button class="btn btn-start" onclick="sendCloudCmd('start')">START ENGINE</button>
-      <button class="btn btn-lock" onclick="sendCloudCmd('lock')">LOCK / SHUTDOWN</button>
-      <button class="btn btn-custom" style="background:#ffb300; color:#000;" onclick="sendCloudCmd('find')">🔊 FIND BIKE</button>
+      <button id="btnUnlock" class="btn btn-unlock" onclick="sendCloudCmd('unlock')">UNLOCK</button>
+      <button id="btnStart" class="btn btn-start" onclick="sendCloudCmd('start')">START ENGINE</button>
+      <button id="btnLock" class="btn btn-lock" onclick="sendCloudCmd('lock')">LOCK / SHUTDOWN</button>
+      <button id="btnFind" class="btn btn-custom" style="background:#ffb300; color:#000;" onclick="sendCloudCmd('find')">🔊 FIND BIKE</button>
       <button class="btn btn-cmd" onclick="sendCloudCmd('status')">STATUS</button>
       <button class="btn btn-cmd" onclick="sendCloudCmd('show_commands')">COMMANDS</button>
     </div>
@@ -439,7 +462,7 @@
     <div id="log">Connecting cloud live terminal...</div>
     <div style="text-align:center;">
       <input type="text" id="cmdInput" placeholder="Enter command / PIN...">
-      <button class="btn btn-cmd" style="width:22%; padding:10px; display:inline-block;" onclick="sendCustomCmd()">SEND</button>
+      <button id="btnSendCmd" class="btn btn-cmd" style="width:22%; padding:10px; display:inline-block;" onclick="sendCustomCmd()">SEND</button>
     </div>
 
     <!-- Smart PMS & Odometer Card (User & Admin Access) -->
@@ -707,7 +730,7 @@
     </div>
   </div>
 
-  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v28.1 (Stolen Mode & Strict Server Auth)</p>
+  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v28.2 (Data Interlock Protected)</p>
 
   <script>
     const FIREBASE_HOST = "keylesstrackerrenz-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -924,6 +947,14 @@
 
     function sendCloudCmd(commandStr) {
       if (!activePin) return;
+
+      // Smart Safety Interlock (V28.2)
+      let currentConnText = document.getElementById('cloudStatus').innerText;
+      if (currentConnText.includes("DATA") || currentConnText.includes("OFFLINE")) {
+        alert("Command Blocked!\nMotorcycle is currently on Cellular Data (SIM800L) or Offline.\n\nPlease control via SMS (e.g. LOCK <PIN>).");
+        return;
+      }
+
       let payload = { cmd: commandStr, pin: activePin, ts: Math.floor(Date.now() / 1000) };
       fetch(`https://${FIREBASE_HOST}/cloud_cmd.json`, { 
         method: 'PUT', 
@@ -1152,6 +1183,30 @@
             let odoDisplay = (data.odo !== undefined) ? parseFloat(data.odo).toFixed(1) + 'km' : '--km';
             document.getElementById('cloudStatus').innerText = `(LINK: ${connType} | BAT: ${data.battery || '--'} | ODO: ${odoDisplay} | UPTIME: ${data.uptime || '--'})`;
 
+            // SMART CELLULAR / DATA MODE INTERLOCK (V28.2)
+            let btnUnlock = document.getElementById('btnUnlock');
+            let btnStart = document.getElementById('btnStart');
+            let btnLock = document.getElementById('btnLock');
+            let btnFind = document.getElementById('btnFind');
+            let btnSendCmd = document.getElementById('btnSendCmd');
+            let dataBanner = document.getElementById('dataWarningBanner');
+
+            if (connType.includes("DATA") || connType.includes("OFFLINE")) {
+              if (btnUnlock) btnUnlock.disabled = true;
+              if (btnStart) btnStart.disabled = true;
+              if (btnLock) btnLock.disabled = true;
+              if (btnFind) btnFind.disabled = true;
+              if (btnSendCmd) btnSendCmd.disabled = true;
+              if (dataBanner) dataBanner.style.display = 'block';
+            } else {
+              if (btnUnlock) btnUnlock.disabled = false;
+              if (btnStart) btnStart.disabled = false;
+              if (btnLock) btnLock.disabled = false;
+              if (btnFind) btnFind.disabled = false;
+              if (btnSendCmd) btnSendCmd.disabled = false;
+              if (dataBanner) dataBanner.style.display = 'none';
+            }
+
             // Handle STOLEN Banner Visibility
             if (data.status === "STOLEN") {
                document.getElementById('stolenWarningBanner').style.display = 'block';
@@ -1209,9 +1264,9 @@
             if (data.wf_s3 !== undefined) savedWifiData[2].ssid = data.wf_s3; 
             if (data.wf_p3 !== undefined) savedWifiData[2].pass = data.wf_p3;
             if (data.wf_s4 !== undefined) savedWifiData[3].ssid = data.wf_s4; 
-            if (data.wf_p4 !== undefined) savedWifiData[3].pass = data.wf_p4;
-            if (data.wf_s5 !== undefined) savedWifiData[4].ssid = data.wf_s5; 
-            if (data.wf_p5 !== undefined) savedWifiData[4].pass = data.wf_p5;
+            if (data.wf_p4 !== undefined) savedWifiData[4].pass = data.wf_p4;
+            if (data.wf_s5 !== undefined) savedWifiData[5].ssid = data.wf_s5; 
+            if (data.wf_p5 !== undefined) savedWifiData[5].pass = data.wf_p5;
             
             let currentSlot = document.getElementById('wifiSlotSelect').value; 
             updateWifiInputs(currentSlot);
