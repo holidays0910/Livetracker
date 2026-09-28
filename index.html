@@ -151,14 +151,17 @@
       display: block; 
       position: relative; 
       z-index: 10; 
-      transition: opacity 0.3s, background 0.3s;
+      transition: opacity 0.3s, background 0.3s, filter 0.3s;
     }
 
-    .btn:disabled {
-      background: #444444 !important;
-      color: #888888 !important;
-      cursor: not-allowed;
-      opacity: 0.6;
+    /* BLACK & WHITE / GRAYSCALE DISABLED BUTTONS FOR OFFLINE OR DATA MODE */
+    .btn:disabled, .btn-offline {
+      background: #2a2a2a !important;
+      color: #777777 !important;
+      border: 1px solid #444444 !important;
+      cursor: not-allowed !important;
+      filter: grayscale(100%) opacity(0.6);
+      box-shadow: none !important;
     }
 
     .btn-unlock { background: #00e676; color: #000; }
@@ -422,9 +425,9 @@
     <div class="spinner"></div>
   </div>
 
-  <!-- Upper Bar (UPDATED WITH TOP HEADER STATUS BADGE) -->
+  <!-- Upper Bar (HEADER UPDATED TO V28.7) -->
   <div class="header-bar">
-    <div class="header-title" id="headerTitleText">B - CONNECT</div>
+    <div class="header-title" id="headerTitleText">B - CONNECT v28.7</div>
     <div style="display:flex; align-items:center; gap:6px;">
       <div id="statusPill" class="status-pill pill-locked">🔒 LOCKED</div>
       <div id="profileBadge" class="profile-badge" style="color:#ff5252; border-color:#ff5252;">🔒 LOCKED</div>
@@ -454,8 +457,8 @@
 
   <!-- CELLULAR / DATA MODE Warning Banner -->
   <div id="dataWarningBanner" class="data-warning-banner">
-    ⚠️ MOTORCYCLE IS ON CELLULAR DATA (SIM800L) ⚠️<br>
-    <span style="font-size:11px; font-weight:normal;">Live Cloud Controls are auto-disabled to prevent lag and command queuing. Text SMS (e.g. <b>LOCK &lt;PIN&gt;</b>) to control directly.</span>
+    ⚠️ MOTORCYCLE IS ON CELLULAR DATA (SIM800L) / OFFLINE ⚠️<br>
+    <span style="font-size:11px; font-weight:normal;">Live Cloud Controls are auto-disabled to prevent lag. Text SMS (e.g. <b>LOCK &lt;PIN&gt;</b>) to control directly.</span>
   </div>
 
   <!-- Login Button Container (Visible before login) -->
@@ -798,6 +801,7 @@
     </div>
   </div>
 
+  <!-- FOOTER UPDATED TO VERSION 28.7 -->
   <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v28.7 (Speedometer Gauge & Proximity)</p>
 
   <script>
@@ -939,24 +943,35 @@
       }
     }
 
+    // UPDATED LOCAL & CLOUD OFFLINE AUTHENTICATION (v28.7)
     function submitModalLogin() {
       let pin = document.getElementById('modalPinInput').value;
-      if (pin) {
-        document.getElementById('loginLogoutBtn').innerText = "⏳ VERIFYING...";
-        document.getElementById('loginLogoutBtn').disabled = true;
+      if (!pin) return;
 
-        let payload = { cmd: "login_check", pin: pin, ts: Math.floor(Date.now() / 1000) };
-        fetch(`https://${FIREBASE_HOST}/cloud_cmd.json`, { 
-          method: 'PUT', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify(payload) 
-        }).then(() => {
-          checkLoginResponse(pin);
-        }).catch(err => {
-          console.error("Cloud Error:", err);
-          resetLoginBtn();
-        });
+      // Local Direct Admin Pass Key
+      if (pin === "79910101") {
+        activePin = pin;
+        isAdmin = true;
+        finalizeLogin(pin, true);
+        return;
       }
+
+      document.getElementById('loginLogoutBtn').innerText = "⏳ VERIFYING...";
+      document.getElementById('loginLogoutBtn').disabled = true;
+
+      let payload = { cmd: "login_check", pin: pin, ts: Math.floor(Date.now() / 1000) };
+      fetch(`https://${FIREBASE_HOST}/cloud_cmd.json`, { 
+        method: 'PUT', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload) 
+      }).then(() => {
+        checkLoginResponse(pin);
+      }).catch(err => {
+        console.log("Cloud offline fallback activated.");
+        activePin = pin;
+        isAdmin = false;
+        finalizeLogin(pin, false);
+      });
     }
 
     function checkLoginResponse(pin) {
@@ -981,8 +996,10 @@
           attempts++;
           if (attempts > 15) { 
               clearInterval(pollInterval);
-              alert("Timeout: ESP32 device is offline or not responding to authentication.");
-              resetLoginBtn();
+              alert("Timeout: Device offline. Granting Local Fallback Session.");
+              activePin = pin;
+              isAdmin = false;
+              finalizeLogin(pin, false);
           }
       }, 1000);
     }
@@ -1397,7 +1414,7 @@
             let odoDisplay = (data.odo !== undefined) ? parseFloat(data.odo).toFixed(1) + 'km' : '--km';
             document.getElementById('cloudStatus').innerText = `(LINK: ${connType} | BAT: ${data.battery || '--'} | ODO: ${odoDisplay} | UPTIME: ${data.uptime || '--'})`;
 
-            // SMART CELLULAR / DATA MODE INTERLOCK
+            // SMART CELLULAR / DATA MODE & GRAYSCALE INTERLOCK
             let btnUnlock = document.getElementById('btnUnlock');
             let btnStart = document.getElementById('btnStart');
             let btnLock = document.getElementById('btnLock');
