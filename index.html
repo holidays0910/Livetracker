@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Keyless Entry System - Cloud Live Tracker v28.2</title>
+  <title>Keyless Entry System - Cloud Live Tracker v28.7</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -89,6 +89,17 @@
       color: #00e676; 
     }
 
+    .status-pill {
+      padding: 4px 10px;
+      border-radius: 15px;
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .pill-locked { background: #b71c1c; color: #fff; }
+    .pill-unlocked { background: #00e676; color: #000; }
+    .pill-engine { background: #0288d1; color: #fff; }
+
     .profile-badge { 
       background: var(--card-bg); 
       border: 1px solid var(--border-color); 
@@ -112,6 +123,20 @@
       z-index: 1; 
       transition: background 0.3s, border 0.3s; 
     }
+
+    /* SPEEDOMETER GAUGE CARD */
+    .speed-card { 
+      background: var(--card-bg); 
+      padding: 15px; 
+      border-radius: 10px; 
+      border: 1px solid var(--border-color); 
+      text-align: center; 
+      max-width: 500px;
+      margin: 0 auto 12px auto;
+    }
+    #speedCanvas { max-width: 200px; width: 100%; height: auto; }
+    .speed-text { font-size: 28px; font-weight: bold; color: #00e676; margin-top: -15px; }
+    .speed-unit { font-size: 14px; color: var(--text-muted); }
 
     .btn { 
       width: 90%; 
@@ -141,6 +166,7 @@
     .btn-lock { background: #ff1744; color: #fff; }
     .btn-cmd { background: #424242; color: #fff; }
     .btn-custom { background: #ab47bc; color: #fff; }
+    .btn-voice { background: #e91e63; color: #fff; }
     .btn-save { 
       padding: 8px; 
       font-size: 12px; 
@@ -367,7 +393,6 @@
       animation: blink 1.5s infinite;
     }
 
-    /* SMART CELLULAR WARNING BANNER */
     .data-warning-banner {
       background: #e65100;
       color: #ffffff;
@@ -397,10 +422,24 @@
     <div class="spinner"></div>
   </div>
 
-  <!-- Upper Bar -->
+  <!-- Upper Bar (UPDATED WITH TOP HEADER STATUS BADGE) -->
   <div class="header-bar">
     <div class="header-title" id="headerTitleText">B - CONNECT</div>
-    <div id="profileBadge" class="profile-badge" style="color:#ff5252; border-color:#ff5252;">🔒 LOCKED</div>
+    <div style="display:flex; align-items:center; gap:6px;">
+      <div id="statusPill" class="status-pill pill-locked">🔒 LOCKED</div>
+      <div id="profileBadge" class="profile-badge" style="color:#ff5252; border-color:#ff5252;">🔒 LOCKED</div>
+    </div>
+  </div>
+
+  <!-- SPEEDOMETER GAUGE CARD (v28.7) -->
+  <div class="speed-card">
+    <canvas id="speedCanvas" width="200" height="130"></canvas>
+    <div class="speed-text"><span id="liveSpeedDisplay">0.0</span> <span class="speed-unit">km/h</span></div>
+  </div>
+
+  <!-- PROXIMITY SIGNAL GAUGE CARD (v28.7) -->
+  <div style="text-align:center; font-size:12px; margin-bottom:10px; background:var(--card-bg); padding:8px; border-radius:8px; border:1px solid var(--border-color); max-width:500px; margin-left:auto; margin-right:auto;">
+    📱 PHONE PROXIMITY: <span id="proxiStatusText" style="color:#888; font-weight:bold;">OFF / UNREGISTERED</span> (<span id="proxiRssiVal">--</span> dBm)
   </div>
 
   <!-- STOLEN MODE Banner -->
@@ -458,11 +497,28 @@
       <button class="btn btn-cmd" onclick="sendCloudCmd('show_commands')">COMMANDS</button>
     </div>
 
+    <!-- DYNAMIC QUICK BUTTONS (RELOCATED TO TOP OF TERMINAL LOG MONITOR - v28.7) -->
+    <div id="customMakerDiv" class="card">
+      <b style="color:#ab47bc;"><span id="customBtnRoleLabel">User</span> Dynamic Quick Buttons</b><br>
+      <div id="customButtonsDiv" style="margin:10px 0;"></div>
+      <div style="text-align:center;">
+        <input type="text" id="btnLabel" placeholder="Button Label" style="width:40%; padding:6px; font-size:12px;">
+        <input type="text" id="btnVal" placeholder="Command Text" style="width:40%; padding:6px; font-size:12px;"><br><br>
+        <button class="btn btn-custom" style="width:80%; display:inline-block; font-size:12px; padding:8px;" onclick="addCustomUserButton()">+ SAVE CUSTOM BUTTON</button>
+      </div>
+      <div id="customButtonsList" style="margin-top:10px;"></div>
+    </div>
+
     <!-- Terminal Monitor Output & Manual Command Input -->
     <div id="log">Connecting cloud live terminal...</div>
     <div style="text-align:center;">
       <input type="text" id="cmdInput" placeholder="Enter command / PIN...">
       <button id="btnSendCmd" class="btn btn-cmd" style="width:22%; padding:10px; display:inline-block;" onclick="sendCustomCmd()">SEND</button>
+    </div>
+
+    <!-- VOICE COMMAND BUTTON AT THE BOTTOM (v28.7) -->
+    <div style="text-align:center; margin-top:10px;">
+      <button class="btn btn-voice" onclick="startVoiceRecognition()">🎤 SPEAK COMMAND</button>
     </div>
 
     <!-- Smart PMS & Odometer Card (User & Admin Access) -->
@@ -529,6 +585,10 @@
       
       <div id="adminSlidersDiv" style="display:none;">
         <div class="item-row">
+          <span style="color:#00e676;">📱 Wi-Fi Proximity Key</span>
+          <label class="switch"><input type="checkbox" id="tog_proxi" onchange="toggleFeature('proximity', this.checked)"><span class="slider"></span></label>
+        </div>
+        <div class="item-row">
           <span style="color:#ffb300;">🔘 HW Button Override</span>
           <label class="switch"><input type="checkbox" id="tog_hwbtn" onchange="toggleFeature('hw_button', this.checked)"><span class="slider"></span></label>
         </div>
@@ -571,6 +631,14 @@
     <div id="adminConfigCardDiv" class="card" style="display:none;">
       <b style="color:#ab47bc;">🛠️ ADVANCED SYSTEM CONFIG (ADMIN)</b><br><br>
       
+      <button class="btn btn-save" style="background:#00e676; color:#000; width:100%; padding:10px; margin-bottom:10px;" onclick="registerCurrentPhoneMac()">📌 REGISTER THIS PHONE FOR PROXIMITY</button>
+
+      <span style="font-size:11px; color:var(--text-muted);">📱 Registered Trusted MAC Address:</span>
+      <div class="form-row">
+        <input type="text" id="cfg_trusted_mac" placeholder="MAC Address">
+        <button class="btn-save" onclick="sendCloudCmd('set_trusted_mac ' + document.getElementById('cfg_trusted_mac').value)">SAVE MAC</button>
+      </div>
+
       <span style="font-size:11px; color:var(--text-muted);">🆔 ESP32 Board MAC ID (License):</span>
       <div class="form-row">
         <input type="text" id="cfg_mac_id" readonly placeholder="Fetching MAC...">
@@ -730,7 +798,7 @@
     </div>
   </div>
 
-  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v28.2 (Data Interlock Protected)</p>
+  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v28.7 (Speedometer Gauge & Proximity)</p>
 
   <script>
     const FIREBASE_HOST = "keylesstrackerrenz-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -744,6 +812,7 @@
     let activePin = "";
     let isAdmin = false;
     let isUserScrolling = false;
+    let editingIndex = -1;
     let map, marker, routePolyline;
     let currentLat = "0.0", currentLon = "0.0";
 
@@ -767,6 +836,34 @@
       iconSize: [32, 32] 
     });
 
+    // DRAW SPEEDOMETER GAUGE (v28.7)
+    function drawGauge(speed) {
+      const canvas = document.getElementById('speedCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const cx = canvas.width / 2;
+      const cy = canvas.height - 10;
+      const r = 75;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, Math.PI, 2 * Math.PI);
+      ctx.lineWidth = 12;
+      ctx.strokeStyle = '#333';
+      ctx.stroke();
+
+      let maxSpd = 120;
+      let speedAngle = Math.PI + (Math.min(speed, maxSpd) / maxSpd) * Math.PI;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, Math.PI, speedAngle);
+      ctx.lineWidth = 12;
+      ctx.strokeStyle = (speed > 80) ? '#ff1744' : (speed > 40) ? '#ffb300' : '#00e676';
+      ctx.stroke();
+
+      document.getElementById('liveSpeedDisplay').innerText = speed.toFixed(1);
+    }
+
     function safeUpdate(elementId, newValue) {
       let el = document.getElementById(elementId);
       if (el && el.value !== String(newValue) && document.activeElement !== el) { 
@@ -783,7 +880,7 @@
             document.getElementById('locationGate').style.display = 'none'; 
             initMap(); 
             syncTelemetry(); 
-            setInterval(syncTelemetry, 3000);
+            setInterval(syncTelemetry, 2000);
             pingPresence(); 
             setInterval(pingPresence, 10000);
             if(isAdmin) fetchViewers();
@@ -904,6 +1001,7 @@
         document.getElementById('adminSlidersDiv').style.display = "block";
         document.getElementById('adminConfigCardDiv').style.display = "block";
         document.getElementById('viewerCountDiv').style.display = "block";
+        document.getElementById('customBtnRoleLabel').innerText = "Admin";
         fetchViewers();
       } else {
         myViewerRole = "OWNER"; 
@@ -912,12 +1010,14 @@
         document.getElementById('adminSlidersDiv').style.display = "none";
         document.getElementById('adminConfigCardDiv').style.display = "none";
         document.getElementById('viewerCountDiv').style.display = "none";
+        document.getElementById('customBtnRoleLabel').innerText = "User";
       }
 
       pingPresence();
       document.getElementById('hiddenAuthSection').style.display = "block";
       document.getElementById('loginBtnContainer').style.display = "block"; 
       closeLoginModal();
+      loadCustomButtons();
       
       let today = new Date().toISOString().split('T')[0];
       document.getElementById('historyDateInput').value = today;
@@ -948,7 +1048,6 @@
     function sendCloudCmd(commandStr) {
       if (!activePin) return;
 
-      // Smart Safety Interlock (V28.2)
       let currentConnText = document.getElementById('cloudStatus').innerText;
       if (currentConnText.includes("DATA") || currentConnText.includes("OFFLINE")) {
         alert("Command Blocked!\nMotorcycle is currently on Cellular Data (SIM800L) or Offline.\n\nPlease control via SMS (e.g. LOCK <PIN>).");
@@ -972,6 +1071,101 @@
       } 
     }
     
+    // VOICE COMMAND ENGINE (v28.7)
+    function startVoiceRecognition() {
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert('Speech recognition is not supported on this mobile browser.');
+        return;
+      }
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        alert('Listening... Speak command now (Unlock, Start, Lock, Find bike)');
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript.toLowerCase();
+        alert('Recognized Voice Command: "' + transcript + '"');
+        if (transcript.includes('unlock') || transcript.includes('buksan')) sendCloudCmd('unlock');
+        else if (transcript.includes('start') || transcript.includes('paandarin')) sendCloudCmd('start');
+        else if (transcript.includes('lock') || transcript.includes('patayin')) sendCloudCmd('lock');
+        else if (transcript.includes('find') || transcript.includes('nasaan')) sendCloudCmd('find');
+        else sendCloudCmd(transcript);
+      };
+
+      recognition.start();
+    }
+
+    // PROXIMITY MAC REGISTRATION (v28.7)
+    function registerCurrentPhoneMac() {
+      alert("Registration triggered! Ensure you are connected to the ESP32 Wi-Fi Hotspot for auto MAC detection.");
+      sendCloudCmd('register_proximity_mac');
+    }
+
+    // DYNAMIC CUSTOM BUTTONS LOGIC
+    function getLocalStorageKey() {
+      return isAdmin ? 'keyless_admin_btns' : 'keyless_user_btns';
+    }
+
+    function loadCustomButtons() {
+      let lsKey = getLocalStorageKey();
+      let btns = JSON.parse(localStorage.getItem(lsKey) || '[]');
+      if (btns.length === 0) {
+        btns = JSON.parse(localStorage.getItem('keyless_custom_buttons') || '[]');
+      }
+      let div = document.getElementById('customButtonsDiv');
+      div.innerHTML = '';
+      let listDiv = document.getElementById('customButtonsList');
+      if (listDiv) listDiv.innerHTML = '';
+
+      btns.forEach((b, idx) => {
+        div.innerHTML += `<button class='btn btn-custom' onclick='sendCloudCmd("${b.val}")'>${b.label}</button>`;
+        if (listDiv) {
+          listDiv.innerHTML += `<div class='item-row'><span style='font-size:13px;'><b>${b.label}</b> (${b.val})</span><div><button style='background:#f57c00;color:#fff;border:none;border-radius:4px;padding:4px 8px;margin-right:4px;cursor:pointer;' onclick='editCustomUserButton(${idx})'>EDIT</button><button style='background:#d32f2f;color:#fff;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;' onclick='deleteCustomUserButton(${idx})'>X</button></div></div>`;
+        }
+      });
+    }
+
+    function addCustomUserButton() {
+      let l = document.getElementById('btnLabel').value;
+      let v = document.getElementById('btnVal').value;
+      if (l && v) {
+        let lsKey = getLocalStorageKey();
+        let btns = JSON.parse(localStorage.getItem(lsKey) || '[]');
+        if (editingIndex >= 0) {
+          btns[editingIndex] = { label: l, val: v };
+          editingIndex = -1;
+        } else {
+          btns.push({ label: l, val: v });
+        }
+        localStorage.setItem(lsKey, JSON.stringify(btns));
+        loadCustomButtons();
+        document.getElementById('btnLabel').value = '';
+        document.getElementById('btnVal').value = '';
+      }
+    }
+
+    function editCustomUserButton(idx) {
+      let lsKey = getLocalStorageKey();
+      let btns = JSON.parse(localStorage.getItem(lsKey) || '[]');
+      if (btns[idx]) {
+        document.getElementById('btnLabel').value = btns[idx].label;
+        document.getElementById('btnVal').value = btns[idx].val;
+        editingIndex = idx;
+      }
+    }
+
+    function deleteCustomUserButton(idx) {
+      let lsKey = getLocalStorageKey();
+      let btns = JSON.parse(localStorage.getItem(lsKey) || '[]');
+      btns.splice(idx, 1);
+      localStorage.setItem(lsKey, JSON.stringify(btns));
+      loadCustomButtons();
+    }
+
     function toggleFeature(feat, state) { 
       let action = state ? 'enable_' + feat : 'disable_' + feat; 
       sendCloudCmd(action); 
@@ -1165,6 +1359,26 @@
         .then(r => r.json())
         .then(data => {
           if (data) {
+            // Speedometer Gauge Update
+            drawGauge(data.speed || 0.0);
+
+            // Top Status Pill Update
+            const statusPill = document.getElementById('statusPill');
+            statusPill.innerText = data.status || 'OFFLINE';
+            if (data.status === 'UNLOCKED') { statusPill.className = 'status-pill pill-unlocked'; }
+            else if (data.status === 'ENGINE RUNNING') { statusPill.className = 'status-pill pill-engine'; }
+            else { statusPill.className = 'status-pill pill-locked'; }
+
+            // Proximity Meter Update
+            let proxiText = document.getElementById('proxiStatusText');
+            let proxiRssi = document.getElementById('proxiRssiVal');
+            let rssiVal = data.phone_rssi !== undefined ? data.phone_rssi : -99;
+            proxiRssi.innerText = rssiVal;
+            if (rssiVal > -65) { proxiText.innerText = "VERY NEAR (~1-3m)"; proxiText.style.color = "#00e676"; }
+            else if (rssiVal > -82) { proxiText.innerText = "MODERATE (~4-8m)"; proxiText.style.color = "#ffb300"; }
+            else if (rssiVal !== -99) { proxiText.innerText = "OUT OF RANGE"; proxiText.style.color = "#ff1744"; }
+            else { proxiText.innerText = "OFF / UNREGISTERED"; proxiText.style.color = "#888"; }
+
             if (data.lat && data.lon) {
               let lat = parseFloat(data.lat); 
               let lon = parseFloat(data.lon);
@@ -1183,7 +1397,7 @@
             let odoDisplay = (data.odo !== undefined) ? parseFloat(data.odo).toFixed(1) + 'km' : '--km';
             document.getElementById('cloudStatus').innerText = `(LINK: ${connType} | BAT: ${data.battery || '--'} | ODO: ${odoDisplay} | UPTIME: ${data.uptime || '--'})`;
 
-            // SMART CELLULAR / DATA MODE INTERLOCK (V28.2)
+            // SMART CELLULAR / DATA MODE INTERLOCK
             let btnUnlock = document.getElementById('btnUnlock');
             let btnStart = document.getElementById('btnStart');
             let btnLock = document.getElementById('btnLock');
@@ -1240,8 +1454,10 @@
             if (data.boot_tune !== undefined) document.getElementById('bootTuneSelect').value = data.boot_tune;
             if (data.isc !== undefined) document.getElementById('tog_isc').checked = data.isc;
             if (data.hw_button !== undefined) document.getElementById('tog_hwbtn').checked = data.hw_button;
+            if (data.proximity !== undefined) document.getElementById('tog_proxi').checked = data.proximity;
 
             if (data.mac_id !== undefined) safeUpdate('cfg_mac_id', data.mac_id);
+            if (data.trusted_mac !== undefined) safeUpdate('cfg_trusted_mac', data.trusted_mac);
             if (data.alarm_dur !== undefined) safeUpdate('cfg_alarm_dur', data.alarm_dur);
             if (data.license_url !== undefined) safeUpdate('cfg_license_url', data.license_url);
             if (data.cc1101_freq !== undefined) safeUpdate('cfg_freq', data.cc1101_freq);
@@ -1264,8 +1480,8 @@
             if (data.wf_s3 !== undefined) savedWifiData[2].ssid = data.wf_s3; 
             if (data.wf_p3 !== undefined) savedWifiData[2].pass = data.wf_p3;
             if (data.wf_s4 !== undefined) savedWifiData[3].ssid = data.wf_s4; 
-            if (data.wf_p4 !== undefined) savedWifiData[4].pass = data.wf_p4;
-            if (data.wf_s5 !== undefined) savedWifiData[5].ssid = data.wf_s5; 
+            if (data.wf_p4 !== undefined) savedWifiData[3].pass = data.wf_p4;
+            if (data.wf_s5 !== undefined) savedWifiData[4].ssid = data.wf_s5; 
             if (data.wf_p5 !== undefined) savedWifiData[5].pass = data.wf_p5;
             
             let currentSlot = document.getElementById('wifiSlotSelect').value; 
@@ -1286,6 +1502,8 @@
           }).catch(err => console.error("Log Error", err));
       }
     }
+
+    drawGauge(0.0);
   </script>
 </body>
 </html>
