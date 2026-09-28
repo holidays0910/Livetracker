@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Keyless Entry System - Cloud Live Tracker v28.7</title>
+  <title>Keyless Entry System - Cloud Live Tracker v28.8</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -425,22 +425,22 @@
     <div class="spinner"></div>
   </div>
 
-  <!-- Upper Bar (HEADER UPDATED TO V28.7) -->
+  <!-- Upper Bar (HEADER UPDATED TO V28.8) -->
   <div class="header-bar">
-    <div class="header-title" id="headerTitleText">B - CONNECT v28.7</div>
+    <div class="header-title" id="headerTitleText">B - CONNECT v28.8</div>
     <div style="display:flex; align-items:center; gap:6px;">
       <div id="statusPill" class="status-pill pill-locked">🔒 LOCKED</div>
       <div id="profileBadge" class="profile-badge" style="color:#ff5252; border-color:#ff5252;">🔒 LOCKED</div>
     </div>
   </div>
 
-  <!-- SPEEDOMETER GAUGE CARD (v28.7) -->
+  <!-- SPEEDOMETER GAUGE CARD (v28.8) -->
   <div class="speed-card">
     <canvas id="speedCanvas" width="200" height="130"></canvas>
     <div class="speed-text"><span id="liveSpeedDisplay">0.0</span> <span class="speed-unit">km/h</span></div>
   </div>
 
-  <!-- PROXIMITY SIGNAL GAUGE CARD (v28.7) -->
+  <!-- PROXIMITY SIGNAL GAUGE CARD (v28.8) -->
   <div style="text-align:center; font-size:12px; margin-bottom:10px; background:var(--card-bg); padding:8px; border-radius:8px; border:1px solid var(--border-color); max-width:500px; margin-left:auto; margin-right:auto;">
     📱 PHONE PROXIMITY: <span id="proxiStatusText" style="color:#888; font-weight:bold;">OFF / UNREGISTERED</span> (<span id="proxiRssiVal">--</span> dBm)
   </div>
@@ -500,7 +500,7 @@
       <button class="btn btn-cmd" onclick="sendCloudCmd('show_commands')">COMMANDS</button>
     </div>
 
-    <!-- DYNAMIC QUICK BUTTONS (RELOCATED TO TOP OF TERMINAL LOG MONITOR - v28.7) -->
+    <!-- DYNAMIC QUICK BUTTONS (RELOCATED TO TOP OF TERMINAL LOG MONITOR - v28.8) -->
     <div id="customMakerDiv" class="card">
       <b style="color:#ab47bc;"><span id="customBtnRoleLabel">User</span> Dynamic Quick Buttons</b><br>
       <div id="customButtonsDiv" style="margin:10px 0;"></div>
@@ -519,9 +519,9 @@
       <button id="btnSendCmd" class="btn btn-cmd" style="width:22%; padding:10px; display:inline-block;" onclick="sendCustomCmd()">SEND</button>
     </div>
 
-    <!-- VOICE COMMAND BUTTON AT THE BOTTOM (v28.7) -->
+    <!-- VOICE COMMAND TOGGLE BUTTON AT THE BOTTOM (v28.8) -->
     <div style="text-align:center; margin-top:10px;">
-      <button class="btn btn-voice" onclick="startVoiceRecognition()">🎤 SPEAK COMMAND</button>
+      <button id="voiceBtn" class="btn btn-voice" onclick="toggleVoiceRecognition()">🎤 SPEAK COMMAND</button>
     </div>
 
     <!-- Smart PMS & Odometer Card (User & Admin Access) -->
@@ -556,6 +556,10 @@
       <div class="item-row">
         <span>&#128680; Tilt Alarm</span>
         <label class="switch"><input type="checkbox" id="tog_alarm" onchange="toggleFeature('alarm', this.checked)"><span class="slider"></span></label>
+      </div>
+      <div class="item-row">
+        <span>🚀 Smart Auto-Start (ISC Prime)</span>
+        <label class="switch"><input type="checkbox" id="tog_smart_start" onchange="toggleFeature('smart_start', this.checked)"><span class="slider"></span></label>
       </div>
       <div class="item-row">
         <span>🥷 Stealth Mode (Silent)</span>
@@ -801,8 +805,8 @@
     </div>
   </div>
 
-  <!-- FOOTER UPDATED TO VERSION 28.7 -->
-  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v28.7 (Speedometer Gauge & Proximity)</p>
+  <!-- FOOTER UPDATED TO VERSION 28.8 -->
+  <p style="color:var(--text-muted); font-size:11px; margin-top:25px; text-align:center;">Developed by: RENZ ALDRIN GOMEZ<br>Web UI Version: v28.8 (Speedometer Gauge & Smart Auto-Start)</p>
 
   <script>
     const FIREBASE_HOST = "keylesstrackerrenz-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -819,6 +823,10 @@
     let editingIndex = -1;
     let map, marker, routePolyline;
     let currentLat = "0.0", currentLon = "0.0";
+
+    // VOICE TOGGLE ENGINE VARIABLES (v28.8)
+    let isVoiceListening = false;
+    let recognition = null;
 
     const savedWifiData = [ 
       {ssid:"", pass:""}, 
@@ -840,7 +848,7 @@
       iconSize: [32, 32] 
     });
 
-    // DRAW SPEEDOMETER GAUGE (v28.7)
+    // DRAW SPEEDOMETER GAUGE (v28.8)
     function drawGauge(speed) {
       const canvas = document.getElementById('speedCanvas');
       if (!canvas) return;
@@ -943,7 +951,7 @@
       }
     }
 
-    // UPDATED LOCAL & CLOUD OFFLINE AUTHENTICATION (v28.7)
+    // UPDATED LOCAL & CLOUD OFFLINE AUTHENTICATION (v28.8)
     function submitModalLogin() {
       let pin = document.getElementById('modalPinInput').value;
       if (!pin) return;
@@ -1088,35 +1096,64 @@
       } 
     }
     
-    // VOICE COMMAND ENGINE (v28.7)
-    function startVoiceRecognition() {
+    // TOGGLE VOICE COMMAND ENGINE (v28.8 UPGRADED)
+    function toggleVoiceRecognition() {
+      const btn = document.getElementById('voiceBtn');
+      
       if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        alert('Speech recognition is not supported on this mobile browser.');
+        alert('Speech recognition is not supported on this browser.');
         return;
       }
+
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'en-US';
-      recognition.interimResults = false;
 
-      recognition.onstart = () => {
-        alert('Listening... Speak command now (Unlock, Start, Lock, Find bike)');
-      };
+      if (isVoiceListening) {
+        if (recognition) recognition.stop();
+        isVoiceListening = false;
+        if (btn) {
+          btn.innerText = "🎤 SPEAK COMMAND";
+          btn.style.background = "#e91e63";
+        }
+      } else {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.continuous = true;
 
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript.toLowerCase();
-        alert('Recognized Voice Command: "' + transcript + '"');
-        if (transcript.includes('unlock') || transcript.includes('buksan')) sendCloudCmd('unlock');
-        else if (transcript.includes('start') || transcript.includes('paandarin')) sendCloudCmd('start');
-        else if (transcript.includes('lock') || transcript.includes('patayin')) sendCloudCmd('lock');
-        else if (transcript.includes('find') || transcript.includes('nasaan')) sendCloudCmd('find');
-        else sendCloudCmd(transcript);
-      };
+        recognition.onstart = () => {
+          isVoiceListening = true;
+          if (btn) {
+            btn.innerText = "🔴 LISTENING... (TAP TO STOP)";
+            btn.style.background = "#d32f2f";
+          }
+        };
 
-      recognition.start();
+        recognition.onresult = (event) => {
+          const lastIdx = event.results.length - 1;
+          const transcript = event.results[lastIdx][0].transcript.toLowerCase().trim();
+          
+          if (transcript.includes('unlock') || transcript.includes('buksan')) sendCloudCmd('unlock');
+          else if (transcript.includes('start') || transcript.includes('paandarin')) sendCloudCmd('start');
+          else if (transcript.includes('lock') || transcript.includes('patayin')) sendCloudCmd('lock');
+          else if (transcript.includes('find') || transcript.includes('nasaan')) sendCloudCmd('find');
+          else if (transcript.includes('update') || transcript.includes('mag-update') || transcript.includes('i-update')) sendCloudCmd('check_update');
+          else if (transcript.includes('restart') || transcript.includes('mag-restart') || transcript.includes('i-restart') || transcript.includes('reboot')) sendCloudCmd('restart');
+          else sendCloudCmd(transcript);
+        };
+
+        recognition.onerror = (e) => {
+          console.log("Speech Error: " + e.error);
+        };
+
+        recognition.onend = () => {
+          if (isVoiceListening) recognition.start();
+        };
+
+        recognition.start();
+      }
     }
 
-    // PROXIMITY MAC REGISTRATION (v28.7)
+    // PROXIMITY MAC REGISTRATION (v28.8)
     function registerCurrentPhoneMac() {
       alert("Registration triggered! Ensure you are connected to the ESP32 Wi-Fi Hotspot for auto MAC detection.");
       sendCloudCmd('register_proximity_mac');
@@ -1457,6 +1494,7 @@
             if (data.pms !== undefined) safeUpdate('cfg_pms', data.pms);
             if (data.direct_pin !== undefined) safeUpdate('cfg_owner_pin', data.direct_pin);
             if (data.alarm !== undefined) document.getElementById('tog_alarm').checked = data.alarm;
+            if (data.smart_start !== undefined) document.getElementById('tog_smart_start').checked = data.smart_start;
             if (data.stealth !== undefined) document.getElementById('tog_stealth').checked = data.stealth;
             if (data.pms_enabled !== undefined) document.getElementById('tog_pms').checked = data.pms_enabled;
             if (data.intro !== undefined) document.getElementById('tog_intro').checked = data.intro;
